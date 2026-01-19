@@ -153,6 +153,14 @@ export const StreamingProvider = ({ children }) => {
     }
   }, [state, states.HOT, states.STREAMING, portalConnected, isReady, transitionTo])
 
+  // Auto-grab cursor when entering STREAMING state
+  useEffect(() => {
+    if (state === states.STREAMING && isReady && containerRef.current) {
+      log.info('Auto-requesting pointer lock on stream start')
+      containerRef.current.requestPointerLock()
+    }
+  }, [state, states.STREAMING, isReady])
+
   // Disconnect when leaving streaming states
   useEffect(() => {
     if (state !== states.WARM && state !== states.HOT && state !== states.STREAMING) {
