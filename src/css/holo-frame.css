@@ -2442,6 +2442,14 @@ button.hud-social-link {
   color: rgba(120, 255, 245, 0.3);
 }
 
+.settings-panel .setting-hint {
+  display: block;
+  margin-top: 0.5cqh;
+  font-size: 1.1cqw;
+  color: rgba(120, 255, 245, 0.5);
+  font-style: italic;
+}
+
 .settings-panel .setting-checkbox {
   width: 5cqw;
   height: 3.5cqh;

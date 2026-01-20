@@ -17,6 +17,7 @@
     "core:window:allow-is-maximized",
     "core:window:allow-set-position",
     "core:window:allow-outer-position",
+    "core:window:allow-set-focus",
     "fs:default",
     "fs:allow-app-read",
     "fs:allow-app-write",

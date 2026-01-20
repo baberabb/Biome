@@ -15,6 +15,7 @@ const SettingsPanel = () => {
   const [useSsl, setUseSsl] = useState(false)
   const [openaiKey, setOpenaiKey] = useState('')
   const [falKey, setFalKey] = useState('')
+  const [huggingfaceKey, setHuggingfaceKey] = useState('')
   const [promptSanitizer, setPromptSanitizer] = useState(true)
   const [seedGeneration, setSeedGeneration] = useState(false)
   const [useStandaloneEngine, setUseStandaloneEngine] = useState(true)
@@ -30,6 +31,7 @@ const SettingsPanel = () => {
       setUseSsl(config.gpu_server?.use_ssl || false)
       setOpenaiKey(config.api_keys?.openai || '')
       setFalKey(config.api_keys?.fal || '')
+      setHuggingfaceKey(config.api_keys?.huggingface || '')
       setPromptSanitizer(config.features?.prompt_sanitizer ?? true)
       setSeedGeneration(config.features?.seed_generation ?? false)
       setUseStandaloneEngine(config.features?.use_standalone_engine ?? true)
@@ -78,7 +80,8 @@ const SettingsPanel = () => {
       },
       api_keys: {
         openai: openaiKey,
-        fal: falKey
+        fal: falKey,
+        huggingface: huggingfaceKey
       },
       features: {
         prompt_sanitizer: promptSanitizer,
@@ -252,6 +255,18 @@ const SettingsPanel = () => {
                 onChange={(e) => setFalKey(e.target.value)}
                 placeholder="fal-..."
               />
+            </div>
+
+            <div className="setting-group">
+              <label className="setting-label">HuggingFace Token</label>
+              <input
+                type="text"
+                className="setting-input"
+                value={huggingfaceKey}
+                onChange={(e) => setHuggingfaceKey(e.target.value)}
+                placeholder="hf_..."
+              />
+              <span className="setting-hint">Required for World Engine model access</span>
             </div>
           </div>
 

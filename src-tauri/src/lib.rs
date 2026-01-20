@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
-use std::fs::{self, File};
-use std::io::{self, Cursor};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, Cursor, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Child, Stdio};
+use std::sync::Mutex;
 use tauri::Manager;
 
 #[cfg(not(target_os = "windows"))]
@@ -11,10 +12,33 @@ use flate2::read::GzDecoder;
 use tar::Archive;
 
 const CONFIG_FILENAME: &str = "config.json";
-const WORLD_ENGINE_ZIP_URL: &str =
-    "https://github.com/Wayfarer-Labs/world_engine/archive/refs/heads/biome-stable.zip";
 const WORLD_ENGINE_DIR: &str = "world_engine";
 const UV_VERSION: &str = "0.9.26";
+
+// Bundled server components (embedded at compile time)
+const SERVER_PY: &str = include_str!("../server-components/server.py");
+const PYPROJECT_TOML: &str = include_str!("../server-components/pyproject.toml");
+
+// Global state for tracking the running server process
+struct ServerState {
+    process: Option<Child>,
+    port: Option<u16>,
+}
+
+impl Default for ServerState {
+    fn default() -> Self {
+        Self {
+            process: None,
+            port: None,
+        }
+    }
+}
+
+static SERVER_STATE: std::sync::OnceLock<Mutex<ServerState>> = std::sync::OnceLock::new();
+
+fn get_server_state() -> &'static Mutex<ServerState> {
+    SERVER_STATE.get_or_init(|| Mutex::new(ServerState::default()))
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct GpuServerConfig {
@@ -27,6 +51,8 @@ pub struct GpuServerConfig {
 pub struct ApiKeysConfig {
     pub openai: String,
     pub fal: String,
+    #[serde(default)]
+    pub huggingface: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -56,12 +82,13 @@ impl Default for AppConfig {
         Self {
             gpu_server: GpuServerConfig {
                 host: "localhost".to_string(),
-                port: 8082,
+                port: 8080,
                 use_ssl: false,
             },
             api_keys: ApiKeysConfig {
                 openai: String::new(),
                 fal: String::new(),
+                huggingface: String::new(),
             },
             features: FeaturesConfig {
                 prompt_sanitizer: true,
@@ -193,6 +220,9 @@ pub struct EngineStatus {
     pub repo_cloned: bool,
     pub dependencies_synced: bool,
     pub engine_dir: String,
+    pub server_running: bool,
+    pub server_port: Option<u16>,
+    pub server_log_path: String,
 }
 
 #[tauri::command]
@@ -208,8 +238,10 @@ async fn check_engine_status(app: tauri::AppHandle) -> Result<EngineStatus, Stri
         .map(|o| o.status.success())
         .unwrap_or(false);
 
-    // Check if repo is downloaded (look for pyproject.toml as indicator)
-    let repo_cloned = engine_dir.exists() && engine_dir.join("pyproject.toml").exists();
+    // Check if server components are installed (look for server.py as indicator)
+    let repo_cloned = engine_dir.exists()
+        && engine_dir.join("pyproject.toml").exists()
+        && engine_dir.join("server.py").exists();
 
     // Check if dependencies are synced by verifying .venv exists and has a working Python
     // This catches cases where sync failed partway through
@@ -227,9 +259,9 @@ async fn check_engine_status(app: tauri::AppHandle) -> Result<EngineStatus, Stri
                 .arg("run")
                 .arg("python")
                 .arg("--version")
+                .env("UV_CACHE_DIR", uv_dir.join("cache"))
                 .env("UV_FROZEN", "1")
                 .env("UV_NO_CONFIG", "1")
-                .env("UV_CACHE_DIR", uv_dir.join("cache"))
                 .env("UV_PYTHON_INSTALL_DIR", uv_dir.join("python_install"))
                 .env("UV_PYTHON_BIN_DIR", uv_dir.join("python_bin"))
                 .env("UV_TOOL_DIR", uv_dir.join("tool"))
@@ -244,11 +276,24 @@ async fn check_engine_status(app: tauri::AppHandle) -> Result<EngineStatus, Stri
         false
     };
 
+    // Check if server is running
+    let (server_running, server_port) = {
+        let state = get_server_state().lock().unwrap();
+        let running = state.process.is_some();
+        let port = state.port;
+        (running, port)
+    };
+
+    let server_log_path = engine_dir.join("server.log").to_string_lossy().to_string();
+
     Ok(EngineStatus {
         uv_installed,
         repo_cloned,
         dependencies_synced,
         engine_dir: engine_dir.to_string_lossy().to_string(),
+        server_running,
+        server_port,
+        server_log_path,
     })
 }
 
@@ -409,98 +454,22 @@ fn extract_tar_gz(bytes: &[u8], _uv_dir: &PathBuf, bin_dir: &PathBuf) -> Result<
 }
 
 #[tauri::command]
-async fn clone_engine_repo(app: tauri::AppHandle) -> Result<String, String> {
+async fn setup_server_components(app: tauri::AppHandle) -> Result<String, String> {
     let engine_dir = get_engine_dir(&app)?;
 
-    // If directory exists with pyproject.toml, remove it to re-download fresh
-    if engine_dir.exists() && engine_dir.join("pyproject.toml").exists() {
-        fs::remove_dir_all(&engine_dir)
-            .map_err(|e| format!("Failed to remove old engine dir: {}", e))?;
-    }
+    // Create engine directory if it doesn't exist
+    fs::create_dir_all(&engine_dir)
+        .map_err(|e| format!("Failed to create engine dir: {}", e))?;
 
-    // Download the zip archive using async reqwest
-    let response = reqwest::get(WORLD_ENGINE_ZIP_URL)
-        .await
-        .map_err(|e| format!("Failed to download world_engine: {}", e))?;
+    // Write bundled server.py
+    fs::write(engine_dir.join("server.py"), SERVER_PY)
+        .map_err(|e| format!("Failed to write server.py: {}", e))?;
 
-    if !response.status().is_success() {
-        return Err(format!(
-            "Failed to download world_engine: HTTP {}",
-            response.status()
-        ));
-    }
+    // Write bundled pyproject.toml
+    fs::write(engine_dir.join("pyproject.toml"), PYPROJECT_TOML)
+        .map_err(|e| format!("Failed to write pyproject.toml: {}", e))?;
 
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    // Extract the zip archive
-    let cursor = Cursor::new(&bytes[..]);
-    let mut archive = zip::ZipArchive::new(cursor)
-        .map_err(|e| format!("Failed to read zip archive: {}", e))?;
-
-    // Extract to data dir (will create world_engine-biome-stable folder)
-    for i in 0..archive.len() {
-        let mut file = archive
-            .by_index(i)
-            .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-
-        let outpath = match file.enclosed_name() {
-            Some(path) => {
-                // GitHub archives have format: repo-branch/...
-                // We need to strip the first component and replace with our dir name
-                let components: Vec<_> = path.components().collect();
-                if components.is_empty() {
-                    continue;
-                }
-
-                // Skip the first component (world_engine-biome-stable) and rebuild path
-                if components.len() == 1 {
-                    // This is just the root folder, skip it
-                    continue;
-                }
-
-                let mut new_path = engine_dir.clone();
-                for component in components.iter().skip(1) {
-                    new_path.push(component);
-                }
-                new_path
-            }
-            None => continue,
-        };
-
-        if file.name().ends_with('/') {
-            // Directory
-            fs::create_dir_all(&outpath)
-                .map_err(|e| format!("Failed to create dir {}: {}", outpath.display(), e))?;
-        } else {
-            // File
-            if let Some(parent) = outpath.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)
-                        .map_err(|e| format!("Failed to create parent dir: {}", e))?;
-                }
-            }
-
-            let mut outfile = File::create(&outpath)
-                .map_err(|e| format!("Failed to create file {}: {}", outpath.display(), e))?;
-
-            io::copy(&mut file, &mut outfile)
-                .map_err(|e| format!("Failed to write file {}: {}", outpath.display(), e))?;
-
-            // Set executable permissions on Unix for scripts
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if let Some(mode) = file.unix_mode() {
-                    fs::set_permissions(&outpath, fs::Permissions::from_mode(mode)).ok();
-                }
-            }
-        }
-    }
-
-    Ok("Repository downloaded successfully".to_string())
+    Ok("Server components installed".to_string())
 }
 
 #[tauri::command]
@@ -532,12 +501,11 @@ async fn sync_engine_dependencies(app: tauri::AppHandle) -> Result<String, Strin
     }
 
     // Run uv sync with the specified environment variables
+    // Note: Not using UV_FROZEN since we install world_engine from git without a lockfile
     let output = Command::new(&uv_binary)
         .current_dir(&engine_dir)
         .arg("sync")
-        .env("UV_FROZEN", "1")
         .env("UV_LINK_MODE", "copy")
-        .env("UV_NO_CONFIG", "1")
         .env("UV_NO_EDITABLE", "1")
         .env("UV_MANAGED_PYTHON", "1")
         .env("UV_CACHE_DIR", uv_dir.join("cache"))
@@ -567,13 +535,285 @@ async fn setup_engine(app: tauri::AppHandle) -> Result<String, String> {
         install_uv(app.clone()).await?;
     }
 
-    // Step 2: Clone/update repo
-    clone_engine_repo(app.clone()).await?;
+    // Step 2: Setup server components (bundled pyproject.toml + server.py)
+    setup_server_components(app.clone()).await?;
 
-    // Step 3: Sync dependencies
+    // Step 3: Sync dependencies (installs world_engine from git)
     sync_engine_dependencies(app).await?;
 
     Ok("Engine setup complete".to_string())
+}
+
+#[tauri::command]
+async fn start_engine_server(app: tauri::AppHandle, port: u16) -> Result<String, String> {
+    let engine_dir = get_engine_dir(&app)?;
+    let uv_dir = get_uv_dir(&app)?;
+    let uv_binary = get_uv_binary_path(&app)?;
+
+    // Check if server is already running
+    {
+        let state = get_server_state().lock().unwrap();
+        if state.process.is_some() {
+            return Err(format!("Server is already running on port {}", state.port.unwrap_or(0)));
+        }
+    }
+
+    // Verify dependencies are synced
+    if !engine_dir.join(".venv").exists() {
+        return Err("Engine dependencies not synced. Please run setup first.".to_string());
+    }
+
+    if !uv_binary.exists() {
+        return Err("uv is not installed. Please install it first.".to_string());
+    }
+
+    println!("[ENGINE] Starting server on port {}...", port);
+    println!("[ENGINE] Engine dir: {:?}", engine_dir);
+    println!("[ENGINE] UV binary: {:?}", uv_binary);
+
+    // Always update server.py with the bundled version (ensures latest code is used)
+    println!("[ENGINE] Updating server.py with bundled version...");
+    fs::write(engine_dir.join("server.py"), SERVER_PY)
+        .map_err(|e| format!("Failed to write server.py: {}", e))?;
+
+    // Run uv sync to ensure dependencies are up to date
+    println!("[ENGINE] Syncing dependencies...");
+    let sync_output = Command::new(&uv_binary)
+        .current_dir(&engine_dir)
+        .arg("sync")
+        .env("UV_CACHE_DIR", uv_dir.join("cache"))
+        .env("UV_NO_CONFIG", "1")
+        .env("UV_PYTHON_INSTALL_DIR", uv_dir.join("python_install"))
+        .env("UV_PYTHON_BIN_DIR", uv_dir.join("python_bin"))
+        .env("UV_TOOL_DIR", uv_dir.join("tool"))
+        .env("UV_TOOL_BIN_DIR", uv_dir.join("tool_bin"))
+        .output()
+        .map_err(|e| format!("Failed to run uv sync: {}", e))?;
+
+    if !sync_output.status.success() {
+        let stderr = String::from_utf8_lossy(&sync_output.stderr);
+        println!("[ENGINE] Warning: uv sync failed: {}", stderr);
+        // Don't fail here - maybe deps are already synced
+    } else {
+        println!("[ENGINE] Dependencies synced successfully");
+    }
+
+    // Create log file for server output
+    let log_file_path = engine_dir.join("server.log");
+    println!("[ENGINE] Server logs will be written to: {:?}", log_file_path);
+
+    // Spawn the server process with piped stdout/stderr so we can tee to console and file
+    // Command: uv run python server.py --port <port>
+    let mut cmd = Command::new(&uv_binary);
+    cmd.current_dir(&engine_dir)
+        .arg("run")
+        .arg("python")
+        .arg("-u")  // Unbuffered output for real-time logging
+        .arg("server.py")
+        .arg("--port")
+        .arg(port.to_string())
+        .env("UV_CACHE_DIR", uv_dir.join("cache"))
+        .env("UV_NO_CONFIG", "1")
+        .env("UV_PYTHON_INSTALL_DIR", uv_dir.join("python_install"))
+        .env("UV_PYTHON_BIN_DIR", uv_dir.join("python_bin"))
+        .env("UV_TOOL_DIR", uv_dir.join("tool"))
+        .env("UV_TOOL_BIN_DIR", uv_dir.join("tool_bin"))
+        .env("PYTHONUNBUFFERED", "1")  // Ensure Python output is unbuffered
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    // Pass through HuggingFace token - first check config, then fall back to environment
+    let config = read_config(app.clone()).unwrap_or_default();
+    let hf_token = if !config.api_keys.huggingface.is_empty() {
+        Some(config.api_keys.huggingface.clone())
+    } else if let Ok(token) = std::env::var("HF_TOKEN") {
+        Some(token)
+    } else if let Ok(token) = std::env::var("HUGGING_FACE_HUB_TOKEN") {
+        Some(token)
+    } else {
+        None
+    };
+
+    if let Some(token) = hf_token {
+        println!("[ENGINE] HuggingFace token configured ({}... chars)", token.len().min(4));
+        cmd.env("HF_TOKEN", &token);
+        cmd.env("HUGGING_FACE_HUB_TOKEN", &token);
+    } else {
+        println!("[ENGINE] Warning: No HuggingFace token configured");
+    }
+
+    let mut child = cmd.spawn()
+        .map_err(|e| format!("Failed to start server: {}", e))?;
+
+    let pid = child.id();
+    println!("[ENGINE] Server process spawned with PID: {}", pid);
+
+    // Set up tee: pipe stdout/stderr to both console and log file
+    let log_file_path_clone = log_file_path.clone();
+
+    // Take ownership of stdout/stderr from child
+    let child_stdout = child.stdout.take();
+    let child_stderr = child.stderr.take();
+
+    // Spawn thread to tee stdout to console and log file
+    if let Some(stdout) = child_stdout {
+        let log_path = log_file_path_clone.clone();
+        std::thread::spawn(move || {
+            let mut log_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .ok();
+
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    println!("[SERVER] {}", line);
+                    if let Some(ref mut file) = log_file {
+                        let _ = writeln!(file, "{}", line);
+                        let _ = file.flush();
+                    }
+                }
+            }
+        });
+    }
+
+    // Spawn thread to tee stderr to console and log file
+    if let Some(stderr) = child_stderr {
+        let log_path = log_file_path_clone;
+        std::thread::spawn(move || {
+            let mut log_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&log_path)
+                .ok();
+
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    eprintln!("[SERVER] {}", line);
+                    if let Some(ref mut file) = log_file {
+                        let _ = writeln!(file, "{}", line);
+                        let _ = file.flush();
+                    }
+                }
+            }
+        });
+    }
+
+    // Store the process handle
+    {
+        let mut state = get_server_state().lock().unwrap();
+        state.process = Some(child);
+        state.port = Some(port);
+    }
+
+    // Wait a moment and check if the process crashed immediately
+    std::thread::sleep(std::time::Duration::from_millis(500));
+
+    // Check if process is still running
+    {
+        let mut state = get_server_state().lock().unwrap();
+        if let Some(ref mut process) = state.process {
+            match process.try_wait() {
+                Ok(Some(exit_status)) => {
+                    // Process exited - read the log file for error details
+                    state.process = None;
+                    state.port = None;
+
+                    // Give the tee threads a moment to flush
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+
+                    let log_contents = fs::read_to_string(&log_file_path)
+                        .unwrap_or_else(|_| "Unable to read log file".to_string());
+
+                    // Extract the last part of the log (likely contains the error)
+                    let error_excerpt: String = log_contents
+                        .lines()
+                        .rev()
+                        .take(30)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+
+                    return Err(format!(
+                        "Server process exited immediately with status: {}\n\nLast log output:\n{}",
+                        exit_status,
+                        error_excerpt
+                    ));
+                }
+                Ok(None) => {
+                    // Process is still running - good!
+                    println!("[ENGINE] Server process is running");
+                }
+                Err(e) => {
+                    println!("[ENGINE] Warning: Could not check process status: {}", e);
+                }
+            }
+        }
+    }
+
+    Ok(format!("Server started on port {} (PID: {})", port, pid))
+}
+
+#[tauri::command]
+async fn stop_engine_server() -> Result<String, String> {
+    let mut state = get_server_state().lock().unwrap();
+
+    if let Some(mut process) = state.process.take() {
+        let pid = process.id();
+        println!("[ENGINE] Stopping server (PID: {})...", pid);
+
+        // Try to kill the process
+        match process.kill() {
+            Ok(_) => {
+                // Wait for process to fully terminate
+                let _ = process.wait();
+                state.port = None;
+                println!("[ENGINE] Server stopped successfully");
+                Ok(format!("Server stopped (PID: {})", pid))
+            }
+            Err(e) => {
+                // Process might have already exited
+                state.port = None;
+                println!("[ENGINE] Server stop - process may have already exited: {}", e);
+                Ok(format!("Server process ended (may have already exited): {}", e))
+            }
+        }
+    } else {
+        Err("No server is currently running".to_string())
+    }
+}
+
+#[tauri::command]
+async fn is_server_running() -> Result<bool, String> {
+    let mut state = get_server_state().lock().unwrap();
+
+    if let Some(ref mut process) = state.process {
+        // Check if process is still running by trying to get its exit status
+        match process.try_wait() {
+            Ok(Some(_status)) => {
+                // Process has exited
+                state.process = None;
+                state.port = None;
+                Ok(false)
+            }
+            Ok(None) => {
+                // Process is still running
+                Ok(true)
+            }
+            Err(_) => {
+                // Error checking - assume not running
+                state.process = None;
+                state.port = None;
+                Ok(false)
+            }
+        }
+    } else {
+        Ok(false)
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -588,9 +828,12 @@ pub fn run() {
             open_config,
             check_engine_status,
             install_uv,
-            clone_engine_repo,
+            setup_server_components,
             sync_engine_dependencies,
-            setup_engine
+            setup_engine,
+            start_engine_server,
+            stop_engine_server,
+            is_server_running
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,7 +8,8 @@ const defaultConfig = {
   },
   api_keys: {
     openai: '',
-    fal: ''
+    fal: '',
+    huggingface: ''
   },
   features: {
     prompt_sanitizer: true,
@@ -143,7 +144,8 @@ export const useConfig = () => {
     openConfig,
     getWsUrl,
     hasOpenAiKey: !!config.api_keys.openai,
-    hasFalKey: !!config.api_keys.fal
+    hasFalKey: !!config.api_keys.fal,
+    hasHuggingFaceKey: !!config.api_keys.huggingface
   }
 }
 

@@ -28,7 +28,7 @@ const statusCodeMessages = {
 
 const TerminalDisplay = () => {
   const { state, states, transitionTo, onStateChange } = usePortal()
-  const { statusCode, setEndpointUrl } = useStreaming()
+  const { statusCode, setEndpointUrl, engineError, clearEngineError } = useStreaming()
   const { config, saveGpuServerUrl } = useConfig()
 
   // Build default URL from config
@@ -38,6 +38,7 @@ const TerminalDisplay = () => {
   const [isDeleting, setIsDeleting] = useState(false)
   const [inputValue, setInputValue] = useState(defaultUrl)
   const [error, setError] = useState(null)
+  const [showEngineError, setShowEngineError] = useState(false)
   const [showPlaceholder, setShowPlaceholder] = useState(false)
   const timeoutRef = useRef(null)
   const currentMessageRef = useRef('')
@@ -128,8 +129,24 @@ const TerminalDisplay = () => {
     return () => el.removeEventListener('animationend', handleAnimationEnd)
   }, [])
 
+  // Handle engine errors from context
   useEffect(() => {
-    // Show error message if there's an error
+    if (engineError && state === 'cold' && !showEngineError) {
+      setShowEngineError(true)
+      // Truncate long error messages to first line or 60 chars
+      const shortError = engineError.split('\n')[0].slice(0, 60)
+      const errorMsg = shortError.length < engineError.split('\n')[0].length ? shortError + '...' : shortError
+      deleteMessage(() => {
+        typeMessage(errorMsg.toUpperCase())
+      })
+    } else if (!engineError && showEngineError) {
+      // Engine error was cleared, go back to normal state message
+      setShowEngineError(false)
+    }
+  }, [engineError, state, showEngineError])
+
+  useEffect(() => {
+    // Show error message if there's a local error (invalid URL etc)
     if (error && state === 'cold') {
       const errorMsg = errorMessages[error] || 'ERROR'
       if (currentMessageRef.current !== errorMsg) {
@@ -141,6 +158,11 @@ const TerminalDisplay = () => {
           }, 2000)
         })
       }
+      return
+    }
+
+    // Don't update message while showing engine error
+    if (showEngineError) {
       return
     }
 
@@ -177,7 +199,7 @@ const TerminalDisplay = () => {
         clearTimeout(timeoutRef.current)
       }
     }
-  }, [state, statusCode, error])
+  }, [state, statusCode, error, showEngineError])
 
   useEffect(() => {
     return onStateChange((newState) => {
@@ -186,8 +208,17 @@ const TerminalDisplay = () => {
         setInputValue(defaultUrl)
       }
       setError(null)
+      // Don't clear engine error here - let user see it
     })
   }, [onStateChange, states.COLD, defaultUrl])
+
+  // Clear engine error when user starts typing
+  const handleClearEngineError = useCallback(() => {
+    if (showEngineError && clearEngineError) {
+      clearEngineError()
+      setShowEngineError(false)
+    }
+  }, [showEngineError, clearEngineError])
 
   const handleInputChange = (e) => {
     setInputValue(e.target.value)
@@ -195,6 +226,8 @@ const TerminalDisplay = () => {
     if (error) {
       setError(null)
     }
+    // Clear engine error when user starts typing
+    handleClearEngineError()
   }
 
   // Validate URL format
@@ -263,7 +296,7 @@ const TerminalDisplay = () => {
       >
         <span className="terminal-prompt">&gt;</span>
         <span
-          className={`terminal-text ${isTyping ? 'typing' : ''} ${isDeleting ? 'deleting' : ''} ${error ? 'error' : ''}`}
+          className={`terminal-text ${isTyping ? 'typing' : ''} ${isDeleting ? 'deleting' : ''} ${error || showEngineError ? 'error' : ''}`}
           id="terminal-text"
         >
           {displayText}
