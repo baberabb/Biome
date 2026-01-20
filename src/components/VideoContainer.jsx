@@ -81,7 +81,7 @@ const VideoContainer = () => {
         <PauseOverlay isActive={settingsOpen && isStreaming && !isShuttingDown} pausedAt={pausedAt} />
         <ConnectionLostOverlay />
         {((state === states.WARM && config?.features?.use_standalone_engine) || engineError) && (
-          <ServerLogDisplay showDismiss={!!engineError} onDismiss={clearEngineError} />
+          <ServerLogDisplay showDismiss={!!engineError} onDismiss={clearEngineError} errorMessage={engineError} />
         )}
         <TerminalDisplay />
         <VideoMask />

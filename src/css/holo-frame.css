@@ -2082,7 +2082,9 @@ button.hud-social-link {
   cursor: text;
   caret-color: transparent; /* Hide native caret by default, show when focused */
   color: rgba(120, 255, 245, 0.5);
-  transition: color 0.15s ease, text-shadow 0.15s ease;
+  transition:
+    color 0.15s ease,
+    text-shadow 0.15s ease;
 }
 
 /* Bright and glowing when focused */
@@ -2632,19 +2634,30 @@ button.hud-social-link {
   color: rgba(255, 200, 100, 0.8);
 }
 
+.engine-status-content.corrupt .engine-status-icon {
+  color: rgba(255, 150, 80, 0.9);
+}
+
 .engine-status-content.error .engine-status-icon {
   color: rgba(255, 100, 100, 0.9);
 }
 
 .engine-status-text {
   flex: 1;
+  min-width: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 1.2cqw;
   color: rgba(120, 255, 245, 0.7);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .engine-status-content.ready .engine-status-text {
   color: rgba(100, 255, 150, 0.85);
+}
+
+.engine-status-content.corrupt .engine-status-text {
+  color: rgba(255, 150, 80, 0.85);
 }
 
 .engine-status-content.error .engine-status-text {
@@ -2888,7 +2901,8 @@ button.hud-social-link {
 }
 
 @keyframes indicatorPulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     box-shadow: 0 0 4px rgba(255, 200, 100, 0.8);
   }

@@ -18,7 +18,7 @@ const getLogClass = (line) => {
   return ''
 }
 
-const ServerLogDisplay = ({ showDismiss = false, onDismiss }) => {
+const ServerLogDisplay = ({ showDismiss = false, onDismiss, errorMessage = null }) => {
   const [logs, setLogs] = useState([])
   const containerRef = useRef(null)
 
@@ -61,6 +61,12 @@ const ServerLogDisplay = ({ showDismiss = false, onDismiss }) => {
         <span className="server-log-title">ENGINE OUTPUT</span>
         <span className="server-log-indicator" />
       </div>
+      {errorMessage && (
+        <div className="server-log-error-banner">
+          <span className="server-log-error-text">{errorMessage}</span>
+          <span className="server-log-error-hint">Open Settings to reinstall the engine.</span>
+        </div>
+      )}
       <div className="server-log-content" ref={containerRef}>
         {logs.length === 0 ? (
           <div className="server-log-empty">Waiting for server output...</div>

@@ -148,7 +148,12 @@ export const StreamingProvider = ({ children }) => {
             log.info('Starting server on port', STANDALONE_PORT)
             const status = await checkEngineStatus()
             if (!status?.uv_installed || !status?.repo_cloned || !status?.dependencies_synced) {
-              handleServerError(new Error('Engine not ready - please run setup in Settings first'))
+              const missing = []
+              if (!status?.uv_installed) missing.push('uv package manager')
+              if (!status?.repo_cloned) missing.push('engine files')
+              if (!status?.dependencies_synced) missing.push('dependencies')
+              const missingStr = missing.join(', ')
+              handleServerError(new Error(`Engine not ready: missing ${missingStr}. Please reinstall in Settings.`))
               return
             }
 
