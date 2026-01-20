@@ -40,6 +40,7 @@ export const StreamingProvider = ({ children }) => {
   const [canvasReady, setCanvasReady] = useState(false)
 
   const wasConnectingOrConnectedRef = useRef(false)
+  const hadErrorRef = useRef(false)
   const frameCountRef = useRef(0)
   const lastFpsUpdateRef = useRef(performance.now())
   const inputLoopRef = useRef(null)
@@ -188,7 +189,7 @@ export const StreamingProvider = ({ children }) => {
       const errorMsg = err?.message || String(err)
       log.error('Server error:', errorMsg)
       setEngineError(errorMsg)
-      transitionTo(states.COLD)
+      // Don't transition to cold immediately - wait for user to dismiss the error
     }
 
     connectToServer()
@@ -245,10 +246,22 @@ export const StreamingProvider = ({ children }) => {
         log.error(isError ? 'Connection error during WARM state' : 'Connection lost during WARM state')
         setEngineError(error || (isError ? 'Connection failed - server may have crashed' : 'Connection lost - server may have crashed'))
         wasConnectingOrConnectedRef.current = false
-        transitionTo(states.COLD)
+        // Don't transition to cold immediately - wait for user to dismiss the error
       }
     }
-  }, [state, states.WARM, states.COLD, connectionState, error, transitionTo])
+  }, [state, states.WARM, connectionState, error])
+
+  // Transition to cold when user dismisses error
+  useEffect(() => {
+    if (engineError) {
+      hadErrorRef.current = true
+    } else if (hadErrorRef.current) {
+      // Error was just cleared (dismissed) - now transition to cold
+      hadErrorRef.current = false
+      log.info('Error dismissed - transitioning to COLD')
+      transitionTo(states.COLD)
+    }
+  }, [engineError, states.COLD, transitionTo])
 
   // Detect connection loss during HOT/STREAMING
   useEffect(() => {

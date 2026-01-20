@@ -20,7 +20,9 @@ const VideoContainer = () => {
     registerContainerRef,
     registerCanvasRef,
     handleContainerClick,
-    isPointerLocked
+    isPointerLocked,
+    engineError,
+    clearEngineError
   } = useStreaming()
 
   const containerRef = useRef(null)
@@ -77,7 +79,9 @@ const VideoContainer = () => {
 
         <PauseOverlay isActive={settingsOpen && isStreaming && !isShuttingDown} pausedAt={pausedAt} />
         <ConnectionLostOverlay />
-        {state === states.WARM && <ServerLogDisplay />}
+        {(state === states.WARM || engineError) && (
+          <ServerLogDisplay showDismiss={!!engineError} onDismiss={clearEngineError} />
+        )}
         <TerminalDisplay />
         <VideoMask />
         <ShutdownOverlay />
