@@ -14,6 +14,8 @@ use tar::Archive;
 const CONFIG_FILENAME: &str = "config.json";
 const WORLD_ENGINE_DIR: &str = "world_engine";
 const UV_VERSION: &str = "0.9.26";
+// Port 7987 = 'O' (79) + 'W' (87) in ASCII
+const STANDALONE_PORT: u16 = 7987;
 
 // Bundled server components (embedded at compile time)
 const SERVER_PY: &str = include_str!("../server-components/server.py");
@@ -95,7 +97,7 @@ impl Default for AppConfig {
         Self {
             gpu_server: GpuServerConfig {
                 host: "localhost".to_string(),
-                port: 8080,
+                port: STANDALONE_PORT,
                 use_ssl: false,
             },
             api_keys: ApiKeysConfig {

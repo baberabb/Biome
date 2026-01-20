@@ -37,7 +37,7 @@ You can open the config file directly from the app by clicking the gear icon in 
 {
   "gpu_server": {
     "host": "localhost",
-    "port": 8082,
+    "port": 7987,
     "use_ssl": false
   },
   "api_keys": {
@@ -54,7 +54,7 @@ You can open the config file directly from the app by clicking the gear icon in 
 | Option | Description |
 |--------|-------------|
 | `gpu_server.host` | Hostname of the Waypoint GPU server |
-| `gpu_server.port` | Port number (default: 8082) |
+| `gpu_server.port` | Port number (default: 7987) |
 | `gpu_server.use_ssl` | Use WSS instead of WS |
 | `api_keys.openai` | OpenAI API key for prompt sanitization |
 | `api_keys.fal` | fal.ai API key for seed image generation |
@@ -104,4 +104,3 @@ This will automatically build the Windows installer and publish it to GitHub Rel
 │       └── main.rs         # Entry point
 └── public/                 # Static assets
 ```
-

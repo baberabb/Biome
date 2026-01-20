@@ -4,7 +4,7 @@ import { StreamingContext, useStreaming } from './StreamingContextShared'
 import { usePortal } from './PortalContext'
 import useWebSocket from '../hooks/useWebSocket'
 import useGameInput from '../hooks/useGameInput'
-import useConfig from '../hooks/useConfig'
+import useConfig, { STANDALONE_PORT } from '../hooks/useConfig'
 import useEngine from '../hooks/useEngine'
 import { createLogger } from '../utils/logger'
 
@@ -114,11 +114,12 @@ export const StreamingProvider = ({ children }) => {
 
     const connectToServer = async () => {
       const useStandalone = config.features?.use_standalone_engine
-      const { host, port } = config.gpu_server
+      const standaloneUrl = `localhost:${STANDALONE_PORT}`
 
       setEngineError(null)
 
-      const wsUrl = endpointUrl || `${host}:${port}`
+      // When standalone engine is on, always use localhost:STANDALONE_PORT
+      const wsUrl = useStandalone ? standaloneUrl : (endpointUrl || `${config.gpu_server.host}:${config.gpu_server.port}`)
 
       if (useStandalone) {
         log.info('Standalone mode enabled, checking server state...')
@@ -127,9 +128,9 @@ export const StreamingProvider = ({ children }) => {
         if (serverAlreadyReady) {
           log.info('Server already running and ready')
         } else {
-          const portInUse = await checkPortInUse(port)
+          const portInUse = await checkPortInUse(STANDALONE_PORT)
           if (portInUse) {
-            log.info('Port', port, 'already in use - assuming server is ready')
+            log.info(`Port ${STANDALONE_PORT} already in use - assuming server is ready`)
           } else if (isServerRunning) {
             // Wait for running server to become ready
             log.info('Server running but not ready - waiting...')
@@ -143,7 +144,7 @@ export const StreamingProvider = ({ children }) => {
             }
           } else {
             // Start new server
-            log.info('Starting server on port', port)
+            log.info('Starting server on port', STANDALONE_PORT)
             const status = await checkEngineStatus()
             if (!status?.uv_installed || !status?.repo_cloned || !status?.dependencies_synced) {
               handleServerError(new Error('Engine not ready - please run setup in Settings first'))
@@ -152,7 +153,7 @@ export const StreamingProvider = ({ children }) => {
 
             try {
               const readyPromise = waitForServerReady(() => cancelled, (fn) => { unlisten = fn })
-              await startServer(port)
+              await startServer(STANDALONE_PORT)
               log.info('Server started, waiting for ready signal...')
               await readyPromise
               if (cancelled) return

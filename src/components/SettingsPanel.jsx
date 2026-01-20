@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { usePortal } from '../context/PortalContext'
 import { useStreaming } from '../context/StreamingContextShared'
-import useConfig from '../hooks/useConfig'
+import useConfig, { STANDALONE_PORT } from '../hooks/useConfig'
 import { useEngine } from '../hooks/useEngine'
 
 const SettingsPanel = () => {
@@ -26,7 +26,7 @@ const SettingsPanel = () => {
   useEffect(() => {
     if (config) {
       const host = config.gpu_server?.host || 'localhost'
-      const port = config.gpu_server?.port || 8080
+      const port = config.gpu_server?.port || STANDALONE_PORT
       setGpuServer(`${host}:${port}`)
       setUseSsl(config.gpu_server?.use_ssl || false)
       setOpenaiKey(config.api_keys?.openai || '')
@@ -212,7 +212,7 @@ const SettingsPanel = () => {
                     className="setting-input"
                     value={gpuServer}
                     onChange={(e) => setGpuServer(e.target.value)}
-                    placeholder="localhost:8082"
+                    placeholder={`localhost:${STANDALONE_PORT}`}
                   />
                 </div>
 

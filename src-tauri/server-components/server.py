@@ -4,7 +4,7 @@ Low-latency WebSocket server for WorldEngine frame streaming.
 Usage:
     python examples/websocket_server.py
 
-Client connects via WebSocket to ws://localhost:8080/ws
+Client connects via WebSocket to ws://localhost:7987/ws
 """
 
 # Immediate startup logging before any imports that could fail
@@ -473,7 +473,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="WorldEngine WebSocket Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
-    parser.add_argument("--port", type=int, default=8080, help="Port to bind to")
+    parser.add_argument("--port", type=int, default=7987, help="Port to bind to")
     args = parser.parse_args()
 
     uvicorn.run(

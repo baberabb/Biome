@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 
+// Port 7987 = 'O' (79) + 'W' (87) in ASCII
+export const STANDALONE_PORT = 7987
+
 const defaultConfig = {
   gpu_server: {
     host: 'localhost',
-    port: 8082,
+    port: STANDALONE_PORT,
     use_ssl: false
   },
   api_keys: {

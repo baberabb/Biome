@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { usePortal } from '../context/PortalContext'
 import { useStreaming } from '../context/StreamingContextShared'
-import useConfig from '../hooks/useConfig'
+import useConfig, { STANDALONE_PORT } from '../hooks/useConfig'
 
 // Display text for portal states
 const stateMessages = {
@@ -37,7 +37,8 @@ const TerminalDisplay = () => {
   const { statusCode, setEndpointUrl, engineError, clearEngineError } = useStreaming()
   const { config, saveGpuServerUrl } = useConfig()
 
-  const defaultUrl = `${config.gpu_server.host}:${config.gpu_server.port}`
+  const useStandaloneEngine = config?.features?.use_standalone_engine ?? true
+  const defaultUrl = useStandaloneEngine ? `localhost:${STANDALONE_PORT}` : `${config?.gpu_server?.host || 'localhost'}:${config?.gpu_server?.port || STANDALONE_PORT}`
   const [displayText, setDisplayText] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
