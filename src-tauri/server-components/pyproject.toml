@@ -11,9 +11,15 @@ dependencies = [
   "hf-xet>=1.0.0",
 ]
 
-# temp fix since uv keeps trying to resolve linux triton dependency on windows
 [dependency-groups]
 dev = []
 
 [tool.uv]
-environments = ["sys_platform == 'win32'"]
+index-strategy = "unsafe-best-match"
+
+[tool.uv.sources]
+triton = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/test/cu128"
