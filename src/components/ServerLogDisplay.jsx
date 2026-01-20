@@ -18,7 +18,7 @@ const getLogClass = (line) => {
   return ''
 }
 
-const ServerLogDisplay = () => {
+const ServerLogDisplay = ({ showDismiss = false, onDismiss }) => {
   const [logs, setLogs] = useState([])
   const containerRef = useRef(null)
 
@@ -56,7 +56,7 @@ const ServerLogDisplay = () => {
   }, [logs])
 
   return (
-    <div className="server-log-display">
+    <div className={`server-log-display ${showDismiss ? 'has-error' : ''}`}>
       <div className="server-log-header">
         <span className="server-log-title">ENGINE OUTPUT</span>
         <span className="server-log-indicator" />
@@ -72,6 +72,11 @@ const ServerLogDisplay = () => {
           ))
         )}
       </div>
+      {showDismiss && (
+        <button className="server-log-dismiss" onClick={onDismiss}>
+          DISMISS
+        </button>
+      )}
     </div>
   )
 }

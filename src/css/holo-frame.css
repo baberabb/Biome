@@ -2953,3 +2953,28 @@ button.hud-social-link {
 .server-log-line.log-success {
   color: rgba(100, 255, 150, 0.9);
 }
+
+/* Error state - stop indicator animation */
+.server-log-display.has-error .server-log-indicator {
+  background: rgba(255, 100, 100, 0.9);
+  animation: none;
+}
+
+.server-log-dismiss {
+  margin: 1cqh 1.2cqw;
+  padding: 0.6cqh 1.5cqw;
+  background: rgba(255, 100, 100, 0.15);
+  border: 1px solid rgba(255, 100, 100, 0.4);
+  border-radius: 0.4cqw;
+  color: rgba(255, 100, 100, 0.9);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1cqw;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.server-log-dismiss:hover {
+  background: rgba(255, 100, 100, 0.25);
+  border-color: rgba(255, 100, 100, 0.6);
+}
