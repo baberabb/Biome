@@ -479,6 +479,9 @@ export const StreamingProvider = ({ children }) => {
           log.info('Engine setup complete after mode choice')
           // Config was already saved by EngineModeChoice, just refresh
           await reloadConfig()
+          // Auto-start session after successful installation
+          log.info('Auto-starting session after engine setup')
+          transitionTo(states.WARM)
         } catch (err) {
           log.error('Engine setup failed:', err)
           setEngineError(err.message || String(err))
@@ -486,7 +489,7 @@ export const StreamingProvider = ({ children }) => {
       }
       // For server mode, nothing special needed - config was already saved
     },
-    [setupEngine, reloadConfig]
+    [setupEngine, reloadConfig, transitionTo, states.WARM]
   )
 
   const value = {
