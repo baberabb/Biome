@@ -2125,6 +2125,39 @@ button.hud-social-link {
   opacity: 1;
 }
 
+/* Cancel button - shown during connection */
+.terminal-cancel-btn {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.1cqw;
+  letter-spacing: 0.15em;
+  color: rgba(255, 120, 120, 0.8);
+  background: transparent;
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  padding: 0.5cqh 1.5cqw;
+  margin-top: 2cqh;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.2s ease;
+  animation: cancelFadeIn 0.5s ease forwards;
+}
+
+.terminal-cancel-btn:hover {
+  color: rgba(255, 150, 150, 1);
+  border-color: rgba(255, 150, 150, 0.7);
+  background: rgba(255, 120, 120, 0.1);
+}
+
+@keyframes cancelFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Hide input in other states */
 .terminal-display.state-warm .terminal-input,
 .terminal-display.state-hot .terminal-input {

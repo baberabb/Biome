@@ -370,6 +370,14 @@ export const StreamingProvider = ({ children }) => {
     await shutdown()
   }, [cleanupState, stopServerIfRunning, shutdown])
 
+  const cancelConnection = useCallback(async () => {
+    log.info('Cancelling connection')
+    wasConnectingOrConnectedRef.current = false
+    cleanupState()
+    await stopServerIfRunning()
+    transitionTo(states.COLD)
+  }, [cleanupState, stopServerIfRunning, transitionTo, states.COLD])
+
   const value = {
     // Connection state
     connectionState, connectionLost, error, isConnected,
@@ -399,7 +407,7 @@ export const StreamingProvider = ({ children }) => {
     pressedKeys, isPointerLocked,
 
     // Actions
-    connect, disconnect, logout, dismissConnectionLost, reset,
+    connect, disconnect, logout, dismissConnectionLost, cancelConnection, reset,
     sendPrompt, sendPromptWithSeed,
     requestPointerLock, exitPointerLock,
     registerContainerRef, registerCanvasRef,

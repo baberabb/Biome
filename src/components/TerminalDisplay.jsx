@@ -34,8 +34,8 @@ const formatErrorMessage = (error) => {
 
 const TerminalDisplay = () => {
   const { state, states, transitionTo, onStateChange } = usePortal()
-  const { statusCode, setEndpointUrl, engineError, clearEngineError } = useStreaming()
-  const { config, saveGpuServerUrl } = useConfig()
+  const { statusCode, setEndpointUrl, engineError, clearEngineError, config, cancelConnection } = useStreaming()
+  const { saveGpuServerUrl } = useConfig()
 
   const useStandaloneEngine = config?.features?.use_standalone_engine ?? true
   const defaultUrl = useStandaloneEngine ? `localhost:${STANDALONE_PORT}` : `${config?.gpu_server?.host || 'localhost'}:${config?.gpu_server?.port || STANDALONE_PORT}`
