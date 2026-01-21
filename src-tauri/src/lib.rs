@@ -7,12 +7,6 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Emitter, Manager, RunEvent};
 
-#[cfg(target_os = "windows")]
-use std::os::windows::process::CommandExt;
-
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
 #[cfg(not(target_os = "windows"))]
 use flate2::read::GzDecoder;
 #[cfg(not(target_os = "windows"))]
@@ -69,9 +63,14 @@ fn get_app_handle() -> Option<&'static tauri::AppHandle> {
 
 /// Create a new Command with platform-specific flags to suppress console windows on Windows
 fn new_command<S: AsRef<std::ffi::OsStr>>(program: S) -> Command {
+    #[allow(unused_mut)]
     let mut cmd = Command::new(program);
     #[cfg(target_os = "windows")]
-    cmd.creation_flags(CREATE_NO_WINDOW);
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
     cmd
 }
 
