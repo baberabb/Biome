@@ -25,7 +25,8 @@ dist-ssr
 *.sw?
 .env/
 *.bak
-*.png
+
+src-tauri/icons/*
 
 # env
 .env
