@@ -28,7 +28,8 @@ const VideoContainer = () => {
   } = useStreaming()
   const { isStandaloneMode } = useConfig()
 
-  const showServerLogs = (state === states.WARM && isStandaloneMode) || (state === states.COLD && engineSetupInProgress) || engineError
+  const showServerLogs =
+    (state === states.WARM && isStandaloneMode) || (state === states.COLD && engineSetupInProgress) || engineError
 
   const containerRef = useRef(null)
   const canvasRef = useRef(null)

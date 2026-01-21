@@ -13,11 +13,7 @@ const PauseOverlay = ({ isActive }) => {
       <div className="pause-content">
         <span className="pause-indicator">PAUSED</span>
         <span className="pause-instruction">
-          {canUnpause ? (
-            'Click the feed to resume'
-          ) : (
-            <>Wait {remainingSeconds}s to resume</>
-          )}
+          {canUnpause ? 'Click the feed to resume' : <>Wait {remainingSeconds}s to resume</>}
         </span>
         <span className="pause-instruction">Press {RESET_KEY_DISPLAY} to reset</span>
       </div>
